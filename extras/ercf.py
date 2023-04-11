@@ -226,6 +226,16 @@ class Ercf:
         self.log_visual = config.getint('log_visual', 1, minval=0, maxval=2)
         self.startup_status = config.getint('startup_status', 0, minval=0, maxval=2)
 
+        # Callbacks
+        gcode_macro = self.printer.load_object(config, 'gcode_macro')
+        if config.get('before_toolchange', None) is not None:
+            self.before_toolchange_gcode = gcode_macro.load_template(config, 'before_toolchange')
+        if config.get('after_toolchange', None) is not None:
+            self.after_toolchange_gcode = gcode_macro.load_template(config, 'after_toolchange')
+        if config.get('on_home', None) is not None:
+            self.on_home_gcode = gcode_macro.load_template(config, 'on_home')
+
+
         # The following lists are the defaults (when reset) and will be overriden by values in ercf_vars.cfg
 
         # Endless spool groups
@@ -1636,6 +1646,13 @@ class Ercf:
         self.action = action
         return old_action
 
+    def _run_callback(self, gcmd, template):
+        context = template.create_template_context()
+        context['params'] = gcmd.get_command_parameters()
+        context['rawparams'] = gcmd.get_raw_command_parameters()
+        self._log_info("running callback %s" % template.name)
+        template.run_gcode_from_command(context)
+
 
 ### STATE GCODE COMMANDS
 
@@ -2577,6 +2594,7 @@ class Ercf:
         force_unload = gcmd.get_int('FORCE_UNLOAD', -1, minval=0, maxval=1)
         try:
             self._home(tool, force_unload)
+            self._run_callback(gcmd, self.on_home_gcode)
         except ErcfError as ee:
             self._pause(str(ee))
 
@@ -2628,7 +2646,9 @@ class Ercf:
             restore_encoder = self._disable_encoder_sensor(update_clog_detection_length=True) # Don't want runout accidently triggering during tool change
             self._last_tool = self.tool_selected
             self._next_tool = tool
+            self._run_callback(gcmd, self.before_toolchange_gcode)
             self._change_tool(tool, skip_tip)
+            self._run_callback(gcmd, self.after_toolchange_gcode)
             self._dump_statistics(quiet=quiet)
             self._enable_encoder_sensor(restore_encoder)
         except ErcfError as ee:
