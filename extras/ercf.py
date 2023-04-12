@@ -1651,7 +1651,10 @@ class Ercf:
         context['params'] = gcmd.get_command_parameters()
         context['rawparams'] = gcmd.get_raw_command_parameters()
         self._log_info("running callback %s" % template.name)
-        template.run_gcode_from_command(context)
+        try:
+            template.run_gcode_from_command(context)
+        except:
+            self._log_error("%s gcode error" % template.name)
 
 
 ### STATE GCODE COMMANDS
